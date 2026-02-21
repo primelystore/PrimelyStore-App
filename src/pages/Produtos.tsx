@@ -13,7 +13,8 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Badge } from "@/components/ui/badge";
-import { Plus, Search, Edit, Trash2, ChevronLeft, ChevronRight, ArrowUpAZ, ArrowDownAZ, Columns3, X, Filter, PackagePlus } from "lucide-react";
+import { Plus, Search, Edit, Trash2, ChevronLeft, ChevronRight, ArrowUpAZ, ArrowDownAZ, Columns3, X, Filter, PackagePlus, History } from "lucide-react";
+import { formatarMoeda, formatarPorcentagem } from "@/lib/utils";
 
 interface Produto {
     id: string;
@@ -32,6 +33,11 @@ interface Produto {
     altura_cm: number | null;
     comprimento_cm: number | null;
     peso_gramas: number | null;
+    ult_preco?: number;
+    ult_margem?: number;
+    ult_bep?: number;
+    ult_roas?: number;
+    ult_calc_data?: string;
 }
 
 // Definição de colunas
@@ -41,7 +47,7 @@ interface ColunaDef {
     key: ColunaKey;
     label: string;
     defaultVisible: boolean;
-    tipo?: "texto" | "numero" | "codigo";
+    tipo?: "texto" | "numero" | "codigo" | "moeda" | "porcentagem" | "data";
 }
 
 const COLUNAS: ColunaDef[] = [
@@ -60,6 +66,11 @@ const COLUNAS: ColunaDef[] = [
     { key: "altura_cm", label: "Altura (cm)", defaultVisible: false, tipo: "numero" },
     { key: "comprimento_cm", label: "Comprimento (cm)", defaultVisible: false, tipo: "numero" },
     { key: "peso_gramas", label: "Peso (g)", defaultVisible: false, tipo: "numero" },
+    { key: "ult_preco", label: "Últ. Preço", defaultVisible: true, tipo: "moeda" },
+    { key: "ult_margem", label: "Últ. Margem", defaultVisible: true, tipo: "porcentagem" },
+    { key: "ult_bep", label: "Últ. BEP", defaultVisible: false, tipo: "moeda" },
+    { key: "ult_roas", label: "Últ. ROAS", defaultVisible: false, tipo: "numero" },
+    { key: "ult_calc_data", label: "Data Cálc.", defaultVisible: true, tipo: "data" },
 ];
 
 const PAGE_SIZE = 10;
@@ -67,10 +78,30 @@ const PAGE_SIZE = 10;
 async function fetchProdutos() {
     const { data, error } = await supabase
         .from("produtos")
-        .select("id, nome, categoria, marca, asin, sku, gtin, gtin_tributavel, ncm, codigo_cest, origem_mercadoria, situacao_operacao, largura_cm, altura_cm, comprimento_cm, peso_gramas")
+        .select(`
+            id, nome, categoria, marca, asin, sku, gtin, gtin_tributavel, ncm, codigo_cest, origem_mercadoria, situacao_operacao, largura_cm, altura_cm, comprimento_cm, peso_gramas,
+            produto_calculos (
+                preco_venda,
+                margem_pct,
+                bep_preco,
+                roas_ideal,
+                created_at
+            )
+        `)
+        .order("created_at", { foreignTable: "produto_calculos", ascending: false })
+        .limit(1, { foreignTable: "produto_calculos" })
         .order("nome", { ascending: true });
+
     if (error) throw new Error(error.message);
-    return data || [];
+
+    return (data || []).map((p: any) => ({
+        ...p,
+        ult_preco: p.produto_calculos?.[0]?.preco_venda,
+        ult_margem: p.produto_calculos?.[0]?.margem_pct,
+        ult_bep: p.produto_calculos?.[0]?.bep_preco,
+        ult_roas: p.produto_calculos?.[0]?.roas_ideal,
+        ult_calc_data: p.produto_calculos?.[0]?.created_at,
+    })) as Produto[];
 }
 
 // Popover simples para seleção de colunas
@@ -188,6 +219,91 @@ function ColunaHeader({
     );
 }
 
+// Modal de Histórico de Cálculos
+function HistoricoCalculosModal({
+    produto,
+    open,
+    onOpenChange
+}: {
+    produto: Produto | null;
+    open: boolean;
+    onOpenChange: (open: boolean) => void;
+}) {
+    const { data, isLoading } = useQuery({
+        queryKey: ["historico_calculos", produto?.id],
+        queryFn: async () => {
+            if (!produto?.id) return [];
+            const { data, error } = await supabase
+                .from("produto_calculos")
+                .select("*")
+                .eq("produto_id", produto.id)
+                .order("created_at", { ascending: false })
+                .limit(20);
+            if (error) throw error;
+            return data;
+        },
+        enabled: !!produto?.id && open,
+    });
+
+    return (
+        <Dialog open={open} onOpenChange={onOpenChange}>
+            <DialogContent className="max-w-4xl">
+                <DialogHeader>
+                    <DialogTitle>Histórico de Precificação</DialogTitle>
+                    <DialogDescription>
+                        Últimos 20 cálculos do produto <span className="font-semibold">{produto?.nome}</span>.
+                    </DialogDescription>
+                </DialogHeader>
+                <div className="py-4">
+                    {isLoading ? (
+                        <p className="text-center text-muted-foreground text-sm">Carregando...</p>
+                    ) : data?.length === 0 ? (
+                        <p className="text-center text-muted-foreground text-sm">Nenhum cálculo registrado para este produto.</p>
+                    ) : (
+                        <div className="rounded-md border overflow-hidden">
+                            <Table>
+                                <TableHeader>
+                                    <TableRow className="bg-muted/50">
+                                        <TableHead className="text-xs">Data</TableHead>
+                                        <TableHead className="text-xs">Fonte</TableHead>
+                                        <TableHead className="text-right text-xs">Preço</TableHead>
+                                        <TableHead className="text-right text-xs">Impostos</TableHead>
+                                        <TableHead className="text-right text-xs">Margem</TableHead>
+                                        <TableHead className="text-right text-xs">Lucro Líq.</TableHead>
+                                        <TableHead className="text-right text-xs">ROI</TableHead>
+                                        <TableHead className="text-right text-xs">BEP / ROAS</TableHead>
+                                    </TableRow>
+                                </TableHeader>
+                                <TableBody>
+                                    {data?.map(c => (
+                                        <TableRow key={c.id}>
+                                            <TableCell className="text-xs">{new Date(c.created_at).toLocaleString()}</TableCell>
+                                            <TableCell className="text-xs">
+                                                <Badge variant="outline" className="text-[10px] uppercase">{c.fonte_taxas}</Badge>
+                                            </TableCell>
+                                            <TableCell className="text-right text-xs font-semibold">{formatarMoeda(c.preco_venda)}</TableCell>
+                                            <TableCell className="text-right text-xs">{c.imposto_pct}%</TableCell>
+                                            <TableCell className="text-right text-xs">{formatarPorcentagem(c.margem_pct)}</TableCell>
+                                            <TableCell className="text-right text-xs font-medium text-emerald-600">{formatarMoeda(c.lucro_liquido)}</TableCell>
+                                            <TableCell className="text-right text-xs">{formatarPorcentagem(c.roi_pct)}</TableCell>
+                                            <TableCell className="text-right text-xs">
+                                                <div className="flex flex-col gap-0.5">
+                                                    <span>{formatarMoeda(c.bep_preco)}</span>
+                                                    {c.roas_ideal > 0 && <span className="text-muted-foreground text-[10px]">{c.roas_ideal.toFixed(2)}x</span>}
+                                                </div>
+                                            </TableCell>
+                                        </TableRow>
+                                    ))}
+                                </TableBody>
+                            </Table>
+                        </div>
+                    )}
+                </div>
+            </DialogContent>
+        </Dialog>
+    );
+}
+
 export default function Produtos() {
     const navigate = useNavigate();
     const queryClient = useQueryClient();
@@ -195,11 +311,13 @@ export default function Produtos() {
     const [pagina, setPagina] = useState(1);
     const [itemParaExcluir, setItemParaExcluir] = useState<Produto | null>(null);
 
-    // Estado para modal de entrada de estoque
     const [estoqueModal, setEstoqueModal] = useState<{ open: boolean; produto: Produto | null }>({
         open: false, produto: null,
     });
     const [estoqueForm, setEstoqueForm] = useState({ quantidade: "", preco_unitario: "", data_compra: obterDataHoje() });
+
+    // Estado para modal de histórico de cálculos
+    const [historicoModal, setHistoricoModal] = useState<{ open: boolean; produto: Produto | null }>({ open: false, produto: null });
 
     // Visibilidade de colunas — mescla defaults com salvos para suportar novas colunas
     const [colVisibilidade, setColVisibilidade] = useState<Record<ColunaKey, boolean>>(() => {
@@ -339,9 +457,15 @@ export default function Produtos() {
 
     const renderCelula = (produto: Produto, col: ColunaDef) => {
         const val = produto[col.key];
+        if (val == null || val === "") return <span className="text-sm text-muted-foreground/50">—</span>;
+
         if (col.key === "nome") return <span className="text-sm font-medium">{val as string}</span>;
-        if (col.tipo === "numero") return <span className="text-sm">{val != null ? String(val).replace(".", ",") : "—"}</span>;
-        return <span className="text-sm">{val != null && val !== "" ? String(val) : "—"}</span>;
+        if (col.tipo === "moeda") return <span className="text-sm">{formatarMoeda(val as number)}</span>;
+        if (col.tipo === "porcentagem") return <span className="text-sm">{formatarPorcentagem(val as number)}</span>;
+        if (col.tipo === "data") return <span className="text-sm">{new Date(val as string).toLocaleDateString()}</span>;
+        if (col.tipo === "numero") return <span className="text-sm">{String(val).replace(".", ",")}</span>;
+
+        return <span className="text-sm">{String(val)}</span>;
     };
 
     return (
@@ -434,7 +558,10 @@ export default function Produtos() {
                                                         }}>
                                                             <PackagePlus className="h-4 w-4 text-emerald-500" />
                                                         </Button>
-                                                        <Button variant="ghost" size="icon" onClick={() => navigate(`/produtos/editar/${produto.id}`)}>
+                                                        <Button variant="ghost" size="icon" title="Histórico de Cálculos" onClick={() => setHistoricoModal({ open: true, produto })}>
+                                                            <History className="h-4 w-4 text-primary" />
+                                                        </Button>
+                                                        <Button variant="ghost" size="icon" title="Editar" onClick={() => navigate(`/produtos/editar/${produto.id}`)}>
                                                             <Edit className="h-4 w-4" />
                                                         </Button>
                                                         <AlertDialogTrigger asChild>
@@ -485,6 +612,12 @@ export default function Produtos() {
                     </AlertDialogFooter>
                 </AlertDialogContent>
             </AlertDialog>
+
+            <HistoricoCalculosModal
+                open={historicoModal.open}
+                produto={historicoModal.produto}
+                onOpenChange={(open) => { if (!open) setHistoricoModal({ open: false, produto: null }); }}
+            />
 
             {/* Modal de Entrada de Estoque */}
             <Dialog open={estoqueModal.open} onOpenChange={(open) => { if (!open) setEstoqueModal({ open: false, produto: null }); }}>

@@ -218,11 +218,91 @@ function TaxasSimplesTab() {
     );
 }
 
+
+function ImpostosTab() {
+    const [impostoVenda, setImpostoVenda] = useState("");
+    const [loading, setLoading] = useState(false);
+
+    const carregar = async () => {
+        setLoading(true);
+        const { data, error } = await supabase
+            .from("app_config")
+            .select("imposto_venda_pct")
+            .eq("id", 1)
+            .maybeSingle();
+
+        if (error) {
+            console.warn("Erro ao carregar app_config:", error);
+            toast.error("Não foi possível carregar o imposto padrão (app_config).");
+        } else {
+            const valor = Number(data?.imposto_venda_pct ?? 0);
+            setImpostoVenda(valor > 0 ? String(valor) : "");
+        }
+        setLoading(false);
+    };
+
+    useEffect(() => { carregar(); }, []);
+
+    const salvar = async () => {
+        const raw = (impostoVenda || "0").replace(",", ".");
+        const pct = Number(raw);
+        if (!Number.isFinite(pct) || pct < 0) {
+            toast.error("Informe um imposto válido (0 ou maior).");
+            return;
+        }
+
+        setLoading(true);
+        const { error } = await supabase
+            .from("app_config")
+            .upsert({ id: 1, imposto_venda_pct: pct }, { onConflict: "id" });
+
+        setLoading(false);
+
+        if (error) {
+            console.warn("Erro ao salvar app_config:", error);
+            toast.error("Não foi possível salvar o imposto padrão.");
+            return;
+        }
+
+        toast.success("Imposto padrão atualizado!");
+    };
+
+    return (
+        <Card>
+            <CardHeader>
+                <CardTitle className="text-base">Imposto sobre Venda</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-4">
+                <div className="grid gap-2 max-w-sm">
+                    <Label>Imposto padrão (%)</Label>
+                    <Input
+                        type="number"
+                        step="0.1"
+                        placeholder="Ex: 7,0"
+                        value={impostoVenda}
+                        onChange={(e) => setImpostoVenda(e.target.value)}
+                    />
+                    <p className="text-[11px] text-muted-foreground">
+                        Esse valor será usado como padrão na Calculadora (você pode alterar por produto quando precisar).
+                    </p>
+                </div>
+                <div className="flex justify-end pt-4 border-t">
+                    <Button onClick={salvar} disabled={false}>
+                        Salvar Alterações
+                    </Button>
+                </div>
+            </CardContent>
+        </Card>
+    );
+}
+
 function AparenciaTab() {
     const [logoLight, setLogoLight] = useState(localStorage.getItem("primely-logo-light") || localStorage.getItem("primely-logo") || "");
     const [logoDark, setLogoDark] = useState(localStorage.getItem("primely-logo-dark") || localStorage.getItem("primely-logo") || "");
+    const [loading, setLoading] = useState(false);
 
     const salvar = () => {
+        setLoading(true);
         if (logoLight) localStorage.setItem("primely-logo-light", logoLight);
         else localStorage.removeItem("primely-logo-light");
 
@@ -233,6 +313,7 @@ function AparenciaTab() {
         localStorage.removeItem("primely-logo");
 
         window.dispatchEvent(new Event("logo-change"));
+        setLoading(false);
         toast.success("Logos atualizadas com sucesso!");
     };
 
@@ -281,7 +362,7 @@ function AparenciaTab() {
                 </div>
 
                 <div className="flex justify-end pt-4 border-t">
-                    <Button onClick={salvar}>Salvar Alterações</Button>
+                    <Button onClick={salvar} disabled={loading}>Salvar Alterações</Button>
                 </div>
             </CardContent>
         </Card>
@@ -294,12 +375,15 @@ export default function Configuracoes() {
             <SectionHeader title="Configurações" description="Gerencie categorias, taxas e parâmetros do sistema." />
 
             <Tabs defaultValue="categorias" className="w-full">
-                <TabsList className="grid w-full grid-cols-4">
+                <TabsList className="grid w-full grid-cols-5">
                     <TabsTrigger value="categorias" className="flex items-center gap-2">
                         <Tag className="h-4 w-4" /> Categorias
                     </TabsTrigger>
                     <TabsTrigger value="taxas" className="flex items-center gap-2">
                         <Percent className="h-4 w-4" /> Taxas Simples
+                    </TabsTrigger>
+                    <TabsTrigger value="impostos" className="flex items-center gap-2">
+                        <Percent className="h-4 w-4" /> Impostos
                     </TabsTrigger>
                     <TabsTrigger value="aparencia" className="flex items-center gap-2">
                         <SettingsIcon className="h-4 w-4" /> Aparência
@@ -313,6 +397,9 @@ export default function Configuracoes() {
                 </TabsContent>
                 <TabsContent value="taxas" className="mt-6">
                     <TaxasSimplesTab />
+                </TabsContent>
+                <TabsContent value="impostos" className="mt-6">
+                    <ImpostosTab />
                 </TabsContent>
                 <TabsContent value="aparencia" className="mt-6">
                     <AparenciaTab />

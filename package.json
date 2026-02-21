@@ -7,7 +7,10 @@
     "dev": "vite",
     "build": "tsc -b && vite build",
     "lint": "eslint .",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "supabase:login": "npx supabase login",
+    "supabase:link": "npx supabase link --project-ref",
+    "supabase:deploy:functions": "npx supabase functions deploy"
   },
   "dependencies": {
     "@hookform/resolvers": "^5.2.2",
