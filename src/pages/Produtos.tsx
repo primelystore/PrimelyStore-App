@@ -47,14 +47,15 @@ interface ColunaDef {
     key: ColunaKey;
     label: string;
     defaultVisible: boolean;
+    hideOnSmall?: boolean;
     tipo?: "texto" | "numero" | "codigo" | "moeda" | "porcentagem" | "data";
 }
 
 const COLUNAS: ColunaDef[] = [
     { key: "nome", label: "Nome", defaultVisible: true },
     { key: "asin", label: "ASIN", defaultVisible: true, tipo: "codigo" },
-    { key: "categoria", label: "Categoria", defaultVisible: true },
-    { key: "marca", label: "Marca", defaultVisible: true },
+    { key: "categoria", label: "Categoria", defaultVisible: true, hideOnSmall: true },
+    { key: "marca", label: "Marca", defaultVisible: true, hideOnSmall: true },
     { key: "sku", label: "SKU", defaultVisible: true, tipo: "codigo" },
     { key: "gtin", label: "GTIN", defaultVisible: false, tipo: "codigo" },
     { key: "gtin_tributavel", label: "GTIN/EAN Tributável", defaultVisible: false, tipo: "codigo" },
@@ -70,7 +71,7 @@ const COLUNAS: ColunaDef[] = [
     { key: "ult_margem", label: "Últ. Margem", defaultVisible: true, tipo: "porcentagem" },
     { key: "ult_bep", label: "Últ. BEP", defaultVisible: false, tipo: "moeda" },
     { key: "ult_roas", label: "Últ. ROAS", defaultVisible: false, tipo: "numero" },
-    { key: "ult_calc_data", label: "Data Cálc.", defaultVisible: true, tipo: "data" },
+    { key: "ult_calc_data", label: "Data Cálc.", defaultVisible: true, tipo: "data", hideOnSmall: true },
 ];
 
 const PAGE_SIZE = 10;
@@ -321,7 +322,12 @@ export default function Produtos() {
 
     // Visibilidade de colunas — mescla defaults com salvos para suportar novas colunas
     const [colVisibilidade, setColVisibilidade] = useState<Record<ColunaKey, boolean>>(() => {
-        const defaults = Object.fromEntries(COLUNAS.map(c => [c.key, c.defaultVisible])) as Record<ColunaKey, boolean>;
+        const isSmallScreen = window.innerWidth < 1200;
+        const defaults = Object.fromEntries(COLUNAS.map(c => [
+            c.key,
+            isSmallScreen && c.hideOnSmall ? false : c.defaultVisible
+        ])) as Record<ColunaKey, boolean>;
+
         try {
             const saved = localStorage.getItem("produtos_col_vis");
             if (saved) return { ...defaults, ...JSON.parse(saved) };
@@ -459,13 +465,13 @@ export default function Produtos() {
         const val = produto[col.key];
         if (val == null || val === "") return <span className="text-sm text-muted-foreground/50">—</span>;
 
-        if (col.key === "nome") return <span className="text-sm font-medium">{val as string}</span>;
-        if (col.tipo === "moeda") return <span className="text-sm">{formatarMoeda(val as number)}</span>;
+        if (col.key === "nome") return <div className="max-w-[150px] sm:max-w-[250px] lg:max-w-[400px] truncate" title={val as string}><span className="text-sm font-medium">{val as string}</span></div>;
+        if (col.tipo === "moeda") return <span className="text-sm whitespace-nowrap">{formatarMoeda(val as number)}</span>;
         if (col.tipo === "porcentagem") return <span className="text-sm">{formatarPorcentagem(val as number)}</span>;
-        if (col.tipo === "data") return <span className="text-sm">{new Date(val as string).toLocaleDateString()}</span>;
+        if (col.tipo === "data") return <span className="text-sm whitespace-nowrap">{new Date(val as string).toLocaleDateString()}</span>;
         if (col.tipo === "numero") return <span className="text-sm">{String(val).replace(".", ",")}</span>;
 
-        return <span className="text-sm">{String(val)}</span>;
+        return <div className="max-w-[150px] truncate" title={String(val)}><span className="text-sm">{String(val)}</span></div>;
     };
 
     return (

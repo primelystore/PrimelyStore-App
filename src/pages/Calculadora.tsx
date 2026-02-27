@@ -18,6 +18,7 @@ interface ProdutoOption {
     id: string;
     nome: string;
     sku: string | null;
+    asin: string | null;
     peso_gramas: number | null;
     comprimento_cm: number | null;
     largura_cm: number | null;
@@ -109,6 +110,7 @@ export default function Calculadora() {
     const [calculando, setCalculando] = useState(false);
     const [buscandoAmazon, setBuscandoAmazon] = useState(false);
     const [sourceAmazon, setSourceAmazon] = useState<"LIVE" | "CACHE" | null>(null);
+    const [asinManual, setAsinManual] = useState<string>("");
     const [salvarHistorico, setSalvarHistorico] = useState(true);
 
     // Para não sobrescrever custo manual sem querer
@@ -122,7 +124,7 @@ export default function Calculadora() {
         // Produtos para o select
         supabase
             .from("produtos")
-            .select("id, nome, sku, peso_gramas, comprimento_cm, largura_cm, altura_cm")
+            .select("id, nome, sku, asin, peso_gramas, comprimento_cm, largura_cm, altura_cm")
             .order("nome")
             .then(({ data }) => {
                 if (data) setProdutos(data as ProdutoOption[]);
@@ -174,26 +176,56 @@ export default function Calculadora() {
 
     const buscarTaxasAmazon = async () => {
         const prod = produtos.find(p => p.id === inputs.produtoId);
-        const sku = prod?.sku;
+        const sku = (prod?.sku || "").trim();
+        // Prioriza o ASIN digitado; se estiver vazio, usa o ASIN do cadastro (se houver).
+        const asin = ((asinManual || prod?.asin || "") as string).trim().toUpperCase();
 
-        if (!sku || inputs.precoCents <= 0) {
-            alert("Selecione um produto cadastrado com SKU e preencha o Preço antes de buscar na Amazon.");
+        const price = Number((inputs.precoCents / 100).toFixed(2));
+        if ((!sku && asin.length !== 10) || !Number.isFinite(price) || price <= 0) {
+            alert("Informe um SKU (no cadastro do produto) ou digite um ASIN válido (10 caracteres) e preencha o Preço antes de buscar na Amazon.");
             return;
         }
 
         setBuscandoAmazon(true);
         try {
-            const res = await supabase.functions.invoke("amazon-fees", {
-                body: { sku, price: inputs.precoCents / 100, fulfillment: modo === "fba" ? "FBA" : "FBM" }
-            });
+            // IMPORTANT: price deve ser número (ponto), nunca string com vírgula.
+            const body: any = {
+                price,
+                fulfillment: modo === "fba" ? "FBA" : "FBM",
+            };
 
-            if (res.error) throw new Error(res.error.message || "Erro desconhecido");
+            // Compatibilidade: algumas versões da Edge Function esperam "identifier".
+            // Enviamos ambos (identifier + sku/asin) para garantir.
+            if (asin.length === 10) {
+                body.identifier = asin;
+                body.idType = "ASIN";
+                body.asin = asin;
+            } else {
+                body.identifier = sku;
+                body.idType = "SKU";
+                body.sku = sku;
+            }
 
-            const { referralFee, fulfillmentFee, otherFeesTotal, source } = res.data;
+            const res = await supabase.functions.invoke("amazon-fees", { body });
+
+            if (res.error) {
+                // Mostra o detalhe real do erro da Edge Function (status + body)
+                let detail = "";
+                try {
+                    // @ts-ignore - context existe em erros de Functions
+                    if (res.error.context) detail = await res.error.context.text();
+                } catch {
+                    /* ignore */
+                }
+                throw new Error(detail ? `${res.error.message} | ${detail}` : (res.error.message || "Erro desconhecido"));
+            }
+
+            const { referralFee, fulfillmentFee, otherFeesTotal, source } = res.data || {};
 
             setInputs(prev => ({
                 ...prev,
                 taxaComissaoManualCents: Math.round((referralFee || 0) * 100),
+                // Para FBA, o fulfillmentFee normalmente representa pick&pack / fulfillment
                 tarifaLogisticaManualCents: modo === "fba" ? Math.round((fulfillmentFee || 0) * 100) : prev.tarifaLogisticaManualCents,
                 outrasTaxasAmazonManualCents: Math.round((otherFeesTotal || 0) * 100),
             }));
@@ -201,7 +233,7 @@ export default function Calculadora() {
 
         } catch (err: any) {
             console.error("Erro na busca da Amazon:", err);
-            alert("Não foi possível buscar as taxas da Amazon. A calculadora continuará no modo Manual.\nDetalhes: " + err.message);
+            alert("Não foi possível buscar as taxas da Amazon. A calculadora continuará no modo Manual.\nDetalhes: " + (err?.message || err));
             if (fonteTaxas === "amazon") {
                 setFonteTaxas("manual");
             }
@@ -217,10 +249,12 @@ export default function Calculadora() {
 
     const handleProdutoChange = async (produtoId: string) => {
         setInputs(prev => ({ ...prev, produtoId }));
+        setAsinManual("");
         custoAquisicaoAutoRef.current = true;
 
         const prod = produtos.find(p => p.id === produtoId);
         if (prod) {
+            setAsinManual(prod.asin ?? "");
             setInputs(prev => ({
                 ...prev,
                 produtoId,
@@ -700,6 +734,28 @@ export default function Calculadora() {
                             <p className="text-[11px] text-muted-foreground">
                                 CMP puxado do estoque: <span className="font-medium">{depositoCMP}</span> (se não houver estoque, o campo fica em branco).
                             </p>
+
+                            <div className="grid grid-cols-2 gap-4 pt-2">
+                                <div className="space-y-2">
+                                    <Label>ASIN (opcional)</Label>
+                                    <Input
+                                        type="text"
+                                        value={asinManual}
+                                        onChange={(e) => setAsinManual(e.target.value.toUpperCase())}
+                                        maxLength={10}
+                                        placeholder="B0XXXXXXXX"
+                                    />
+                                    <p className="text-[11px] text-muted-foreground">Se preenchido (10 caracteres), a busca de taxas usará o ASIN; caso contrário, usa o SKU do cadastro.</p>
+                                </div>
+                                <div className="space-y-2">
+                                    <Label className="text-muted-foreground">SKU (do cadastro)</Label>
+                                    <Input
+                                        value={produtos.find(p => p.id === inputs.produtoId)?.sku ?? ""}
+                                        disabled
+                                        placeholder="—"
+                                    />
+                                </div>
+                            </div>
                         </div>
 
                         <div className="grid grid-cols-2 gap-4">

@@ -169,7 +169,6 @@ export default function Estoque() {
     const submitTransfer = () => {
         const qty = parseInt(transferForm.quantidade);
         if (!qty || qty <= 0) { toast.error("Quantidade inválida."); return; }
-        if (qty > (transferModal.item?.quantidade || 0)) { toast.error("Quantidade indisponível."); return; }
         if (!transferForm.data) { toast.error("Data obrigatória."); return; }
 
         transferMutation.mutate({
@@ -187,7 +186,6 @@ export default function Estoque() {
     const submitSaida = () => {
         const qty = parseInt(saidaForm.quantidade);
         if (!qty || qty <= 0) { toast.error("Quantidade inválida."); return; }
-        if (qty > (saidaModal.item?.quantidade || 0)) { toast.error("Quantidade indisponível."); return; }
         if (!saidaForm.data) { toast.error("Data obrigatória."); return; }
 
         saidaMutation.mutate({
@@ -211,7 +209,10 @@ export default function Estoque() {
         if (componentes.length < 2) { toast.error("Mínimo 2 componentes."); return; }
         const numKits = parseInt(kitQuantidade);
         if (!numKits || numKits <= 0) { toast.error("Quantidade inválida."); return; }
-        if (numKits > kitMaxPossivel) { toast.error(`Máximo: ${kitMaxPossivel}`); return; }
+        // Removida a trava de numKits > kitMaxPossivel. Agora avisamos se passar do limite, mas permitimos criar.
+        if (numKits > kitMaxPossivel && kitMaxPossivel > 0) {
+            toast.warning(`Atenção: Criando mais kits do que o estoque disponível. Os componentes ficarão negativos.`);
+        }
 
         kitMutation.mutate({
             nome: kitNome,
@@ -277,7 +278,7 @@ export default function Estoque() {
 
                 <TabsContent value="prep-center" className="mt-6">
                     <div className="flex justify-end mb-4">
-                        <Button onClick={openKitModal} className="gap-2" disabled={prepItems.length < 2}>
+                        <Button onClick={openKitModal} className="gap-2">
                             <PackagePlus className="h-4 w-4" /> Criar Kit
                         </Button>
                     </div>
@@ -339,7 +340,7 @@ export default function Estoque() {
                     <div className="space-y-4 py-2">
                         <div className="space-y-2">
                             <Label htmlFor="t-qty">Quantidade *</Label>
-                            <Input id="t-qty" type="number" min="1" max={transferModal.item?.quantidade} value={transferForm.quantidade}
+                            <Input id="t-qty" type="number" min="1" value={transferForm.quantidade}
                                 onChange={(e) => setTransferForm(p => ({ ...p, quantidade: e.target.value }))} placeholder="Ex: 5" />
                         </div>
                         <div className="space-y-2">
@@ -373,7 +374,7 @@ export default function Estoque() {
                     <div className="space-y-4 py-2">
                         <div className="space-y-2">
                             <Label htmlFor="s-qty">Quantidade *</Label>
-                            <Input id="s-qty" type="number" min="1" max={saidaModal.item?.quantidade} value={saidaForm.quantidade}
+                            <Input id="s-qty" type="number" min="1" value={saidaForm.quantidade}
                                 onChange={(e) => setSaidaForm(p => ({ ...p, quantidade: e.target.value }))} placeholder="Ex: 3" />
                         </div>
                         <div className="space-y-2">
@@ -563,9 +564,9 @@ export default function Estoque() {
                         <div className="grid grid-cols-2 gap-4">
                             <div className="space-y-2">
                                 <Label htmlFor="kit-qty">Quantidade de Kits *</Label>
-                                <Input id="kit-qty" type="number" min="1" max={kitMaxPossivel}
+                                <Input id="kit-qty" type="number" min="1"
                                     value={kitQuantidade} onChange={(e) => setKitQuantidade(e.target.value)}
-                                    placeholder={kitMaxPossivel > 0 ? `Máx: ${kitMaxPossivel}` : "0"} />
+                                    placeholder={kitMaxPossivel > 0 ? `Máx S/ Faltar: ${kitMaxPossivel}` : "Qtd"} />
                             </div>
                             <div className="space-y-2">
                                 <Label>Custo Estimado</Label>

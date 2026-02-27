@@ -56,15 +56,21 @@ export function computeFIFO(movements: MovementNormalized[]): EngineResult {
         deposito: Deposito,
         pid: string
     ): { consumedLayers: FifoLayer[], totalValueConsumed: bigint } => {
-        // Strict Check: Do we have enough?
+        // Strict Check: Do we have enough? - REMOVIDO: Permitir saldo negativo
         const totalAvailable = layers.reduce((acc, l) => acc + l.quantidade, 0);
-        if (totalAvailable < qtdRequired) {
-            throw new Error(`Estoque insuficiente em ${deposito}. Disp: ${totalAvailable}, Req: ${qtdRequired}`);
-        }
 
         let remaining = qtdRequired;
         let totalValue = 0n;
         const consumed: FifoLayer[] = [];
+
+        if (totalAvailable < qtdRequired) {
+            // Permite registro mas adiciona um log implícito ou deixa as layers zerarem
+            // Para o que faltar, o valor consumido será 0 (já que não há custo no estoque).
+            const faltante = qtdRequired - totalAvailable;
+            // Se o amount necessário for maior e não temos layers para tudo:
+            // O loop abaixo consumirá todas as layers existentes. O 'remaining' ficará > 0, 
+            // mas sairá do loop (layers.length vai zerar).
+        }
 
         // Work on a copy/index basis or shift strictly?
         // Since we threw on insufficient stock, we can safely mutate.
@@ -95,6 +101,30 @@ export function computeFIFO(movements: MovementNormalized[]): EngineResult {
                 layer.quantidade -= remaining;
                 remaining = 0;
             }
+        }
+        // Se sobrou remaining (ou seja, tentou consumir mais do que tinha), precisamos 
+        // garantir que o saldo final do produto reflita isso.
+        // Adicionaremos uma "layer negativa" para manter a contabilização do FIFO consistente 
+        // ou deixamos o updatePosition ler o negativo.
+        if (remaining > 0) {
+            // Em caso de falta, inserimos um registro negativo com custo unitário de 0.
+            layers.push({
+                movementId: 'negative-adjustment', // fake id para marcar o excesso
+                quantidade: -remaining,
+                valorTotalInicial: 0n,
+                valorTotalAtual: 0n,
+                custoUnitario: 0n,
+                data: new Date().toISOString()
+            });
+            consumed.push({
+                movementId: 'negative-adjustment',
+                quantidade: remaining,
+                valorTotalAtual: 0n,
+                valorTotalInicial: 0n,
+                custoUnitario: 0n,
+                data: new Date().toISOString()
+            });
+            // O valor consumido para essa quantidade inventada é zero.
         }
 
         return { consumedLayers: consumed, totalValueConsumed: totalValue };

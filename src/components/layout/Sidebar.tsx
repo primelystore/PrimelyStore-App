@@ -9,6 +9,7 @@ import {
     Rocket,
     Boxes,
     DollarSign,
+    Megaphone,
     Settings,
 } from "lucide-react";
 import { NavLink } from "react-router-dom";
@@ -95,6 +96,7 @@ export function Sidebar() {
                     <SidebarLink to="/fornecedores" icon={Users} label="Fornecedores" />
                     <SidebarLink to="/prep-centers" icon={Warehouse} label="Prep Centers" />
                     <SidebarLink to="/calculadora" icon={Calculator} label="Calculadora" />
+                    <SidebarLink to="/amazon-ads" icon={Megaphone} label="Amazon Ads" />
                     <SidebarLink to="/configuracoes" icon={Settings} label="Configurações" />
                 </nav>
             </div>

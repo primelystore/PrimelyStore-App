@@ -14,6 +14,7 @@ import Mineracao from "@/pages/Mineracao";
 import Estoque from "@/pages/Estoque";
 import Financeiro from "@/pages/Financeiro";
 import Calculadora from "@/pages/Calculadora";
+import AmazonAds from "@/pages/AmazonAds";
 import Configuracoes from "@/pages/Configuracoes";
 
 const queryClient = new QueryClient({
@@ -47,6 +48,7 @@ export default function App() {
               <Route path="/estoque" element={<Estoque />} />
               <Route path="/financeiro" element={<Financeiro />} />
               <Route path="/calculadora" element={<Calculadora />} />
+              <Route path="/amazon-ads" element={<AmazonAds />} />
               <Route path="/configuracoes" element={<Configuracoes />} />
             </Route>
           </Routes>

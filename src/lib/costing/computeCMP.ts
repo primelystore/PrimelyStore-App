@@ -81,14 +81,9 @@ export function computeCMP(movements: MovementNormalized[]): EngineResult {
                 if (!mov.origem) throw new Error("Saída sem origem");
                 const orig = pState.positions[mov.origem];
 
-                // Strict Stock Check
+                // Strict Stock Check - REMOVIDO: Permitir saldo negativo (vendas sem entrada registrada)
                 if (orig.quantidade < mov.quantidade) {
-                    // Logic: Return NEEDS_INPUT and stop processing this item? OR this movement?
-                    // User requirement: "retornar NEEDS_INPUT (com detalhe) em vez de continuar."
-                    // We log the issue. The engine result status will be NEEDS_INPUT.
-                    // We DO NOT process the cost to avoid negative inventory math which breaks CMP.
-                    issues.push({ movementId: mov.id, message: `Estoque insuficiente em ${mov.origem}. Tem: ${orig.quantidade}, Tentou Saída: ${mov.quantidade}` });
-                    continue;
+                    issues.push({ movementId: mov.id, message: `Atenção: Estoque ficou negativo em ${mov.origem}. Tinha: ${orig.quantidade}, Saiu: ${mov.quantidade}` });
                 }
 
                 const unitCost = orig.quantidade > 0 ? div(orig.valorTotal, orig.quantidade) : 0n;
@@ -114,10 +109,9 @@ export function computeCMP(movements: MovementNormalized[]): EngineResult {
                 const orig = pState.positions[mov.origem];
                 const dest = pState.positions[mov.destino];
 
-                // Strict Stock Check
+                // Strict Stock Check - REMOVIDO: Permitir saldo negativo
                 if (orig.quantidade < mov.quantidade) {
-                    issues.push({ movementId: mov.id, message: `Estoque insuficiente em ${mov.origem}. Tem: ${orig.quantidade}, Tentou Transf: ${mov.quantidade}` });
-                    continue;
+                    issues.push({ movementId: mov.id, message: `Atenção: Estoque ficou negativo em ${mov.origem}. Tinha: ${orig.quantidade}, Transferiu: ${mov.quantidade}` });
                 }
 
                 const transferValue = calcProportional(orig.valorTotal, orig.quantidade, mov.quantidade);
