@@ -399,7 +399,7 @@ export default function Estoque() {
 
             {/* History Dialog */}
             <Dialog open={historicoModal.open} onOpenChange={(open) => { if (!open) setHistoricoModal(p => ({ ...p, open: false })); }}>
-                <DialogContent className="max-w-2xl">
+                <DialogContent className="max-w-5xl">
                     <DialogHeader>
                         <DialogTitle>
                             <History className="inline h-5 w-5 mr-2" />
