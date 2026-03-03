@@ -380,6 +380,9 @@ export default function Produtos() {
             toast.success("Entrada de estoque registrada no Prep Center e custos recalculados!");
             setEstoqueModal({ open: false, produto: null });
             setEstoqueForm({ quantidade: "", preco_unitario: "", data_compra: obterDataHoje() });
+            // Invalidar queries de estoque para sincronização com a página Estoque
+            queryClient.invalidateQueries({ queryKey: ["estoque-movimentacoes"] });
+            queryClient.invalidateQueries({ queryKey: ["produtos-estoque"] });
         },
         onError: () => toast.error("Erro ao registrar entrada de estoque."),
     });

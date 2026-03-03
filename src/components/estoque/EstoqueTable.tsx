@@ -122,7 +122,7 @@ export function EstoqueTable({ items, isLoading, deposito, onTransferir, onSaida
                                     )}
                                     {onTransferir && (deposito === "amazon_fba" || deposito === "full_ml") && (
                                         <Button size="sm" variant="outline" title="Retornar para Prep" onClick={() => onTransferir(item, "prep_center")}>
-                                            <ArrowRightLeft className="h-4 w-4" /> Returns
+                                            <ArrowRightLeft className="h-4 w-4" /> Retorno
                                         </Button>
                                     )}
                                     <Button size="sm" variant="destructive" title="Saída" onClick={() => onSaida(item)}>
