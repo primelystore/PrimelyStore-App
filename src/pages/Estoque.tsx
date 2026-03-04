@@ -106,7 +106,14 @@ export default function Estoque() {
         return movimentacoes.filter(m =>
             m.produto_id === historicoModal.item!.produto_id &&
             (m.deposito_destino === historicoModal.deposito || m.deposito_origem === historicoModal.deposito)
-        ).sort((a, b) => new Date(b.data_movimentacao).getTime() - new Date(a.data_movimentacao).getTime());
+        ).sort((a, b) => {
+            const dateDiff = new Date(b.data_movimentacao).getTime() - new Date(a.data_movimentacao).getTime();
+            if (dateDiff !== 0) return dateDiff;
+            // Dentro da mesma data, ordenar pelo número na observação (decrescente)
+            const numA = parseInt(a.observacao || "0") || 0;
+            const numB = parseInt(b.observacao || "0") || 0;
+            return numB - numA;
+        });
     }, [movimentacoes, historicoModal]);
 
     // Kit Logic
